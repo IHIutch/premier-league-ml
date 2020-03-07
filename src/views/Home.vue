@@ -2,25 +2,35 @@
   <div>
     <div>
       <div>
-        <select v-model="playerName">
+        <select v-model="player">
           <option :value="null">-- Choose a Player --</option>
-          <option v-for="(player, idx) in players" :value="idx" :key="idx">
-            {{ player }}
+          <option
+            v-for="(player, idx, count) in players"
+            :value="idx"
+            :key="count"
+          >
+            {{ idx }}
+          </option>
+        </select>
+        <select v-model="week">
+          <option :value="null">-- Choose a GW --</option>
+          <option v-for="(num, idx) in urls.length" :value="idx" :key="idx">
+            {{ num }}
           </option>
         </select>
       </div>
       <div>
-        <span>Predicted Points: {{ output }}</span>
+        <span>Predicted Points: {{ output | roundToThousandths }}</span>
       </div>
       <div>
         <span>Actual Points: {{ actual }}</span>
       </div>
       <div>
-        <span>Error: {{ errorRate }}%</span>
+        <span>Error: {{ errorRate | roundToThousandths }}%</span>
       </div>
     </div>
     <button @click="trainBrain()">Train</button>
-    <button @click="runBrain()">Run</button>
+    <button @click="runBrain()" :disabled="!didTrain">Run</button>
   </div>
 </template>
 
@@ -40,8 +50,13 @@ export default {
   name: "Home",
   data() {
     return {
-      playerName: null,
-      output: null,
+      urls: [
+        "https://raw.githubusercontent.com/IHIutch/Fantasy-Premier-League/master/data/2019-20/gws/gw1.csv",
+        "https://raw.githubusercontent.com/IHIutch/Fantasy-Premier-League/master/data/2019-20/gws/gw2.csv"
+      ],
+      player: null,
+      week: null,
+      output: 0,
       actual: null,
       csvData: [],
       columns: [
@@ -60,19 +75,25 @@ export default {
         "total_points"
       ],
       maxValues: {},
-      trainingData: []
+      trainingData: [],
+      didTrain: false
     };
   },
   methods: {
     runBrain() {
-      let output = net.run(this.trainingData[this.playerName].input);
-      this.output = (output * this.maxValues.total_points).toFixed(4);
-      this.actual = this.csvData[this.playerName].total_points;
+      let value = [];
+      Object.keys(this.playerWeek).forEach(key => {
+        if (this.columns.indexOf(key) != -1 && key != "total_points")
+          value.push(this.playerWeek[key] / this.maxValues[key]);
+      });
+      let output = net.run(value);
+      this.output = output * this.maxValues.total_points;
+      this.actual = this.playerWeek.total_points;
     },
     getTrainingData() {
       this.trainingData = this.csvData.map(data => {
-        var inputs = [];
-        var outputs = [];
+        let inputs = [];
+        let outputs = [];
         this.columns.forEach(idx => {
           if (idx == "total_points") {
             outputs.push(data[idx] / this.maxValues[idx]);
@@ -97,21 +118,21 @@ export default {
       this.getMaxValues();
       this.getTrainingData();
       net.train(this.trainingData, config);
+      this.didTrain = true;
     },
     loadData() {
       var self = this;
-      Papa.parse(
-        "https://raw.githubusercontent.com/IHIutch/Fantasy-Premier-League/master/data/2019-20/gws/gw1.csv",
-        {
+      this.urls.forEach(url => {
+        Papa.parse(url, {
           download: true,
           header: true,
           dynamicTyping: true,
           skipEmptyLines: true,
           complete: function(res) {
-            self.csvData = res.data;
+            self.csvData = [].concat(...self.csvData, res.data);
           }
-        }
-      );
+        });
+      });
     },
     getMaxValues() {
       this.csvData.forEach(data => {
@@ -130,15 +151,33 @@ export default {
     errorRate() {
       if (this.output && this.actual) {
         var pct = (Math.abs(this.output - this.actual) / this.actual) * 100;
-        return pct.toFixed(4);
+        return pct;
       } else {
-        return null;
+        return 0;
       }
     },
     players() {
-      return this.csvData.map(data => {
-        return data.name;
-      });
+      return this.csvData.reduce((obj, data) => {
+        if (!obj[data.name]) {
+          obj[data.name] = [];
+          obj[data.name].push(data);
+        } else {
+          obj[data.name].push(data);
+        }
+        return obj;
+      }, {});
+    },
+    playerWeek() {
+      if (this.player != null && this.week != null) {
+        return this.players[this.player][this.week];
+      } else {
+        return null;
+      }
+    }
+  },
+  filters: {
+    roundToThousandths(val) {
+      return val.toFixed(3);
     }
   }
 };
