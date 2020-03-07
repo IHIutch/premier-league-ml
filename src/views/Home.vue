@@ -23,7 +23,7 @@
         <span>Predicted Points: {{ output | roundToThousandths }}</span>
       </div>
       <div>
-        <span>Actual Points: {{ actual }}</span>
+        <span>Actual Points: {{ actualPoints }}</span>
       </div>
       <div>
         <span>Error: {{ errorRate | roundToThousandths }}%</span>
@@ -52,7 +52,10 @@ export default {
     return {
       urls: [
         "https://raw.githubusercontent.com/IHIutch/Fantasy-Premier-League/master/data/2019-20/gws/gw1.csv",
-        "https://raw.githubusercontent.com/IHIutch/Fantasy-Premier-League/master/data/2019-20/gws/gw2.csv"
+        "https://raw.githubusercontent.com/IHIutch/Fantasy-Premier-League/master/data/2019-20/gws/gw2.csv",
+        "https://raw.githubusercontent.com/IHIutch/Fantasy-Premier-League/master/data/2019-20/gws/gw3.csv",
+        "https://raw.githubusercontent.com/IHIutch/Fantasy-Premier-League/master/data/2019-20/gws/gw4.csv",
+        "https://raw.githubusercontent.com/IHIutch/Fantasy-Premier-League/master/data/2019-20/gws/gw5.csv"
       ],
       player: null,
       week: null,
@@ -72,6 +75,13 @@ export default {
         "ict_index",
         "influence",
         "selected",
+        "threat",
+        "value",
+        "minutes",
+        "team_a_score",
+        "team_h_score",
+        "transfers_in",
+        "transfers_out",
         "total_points"
       ],
       maxValues: {},
@@ -88,7 +98,6 @@ export default {
       });
       let output = net.run(value);
       this.output = output * this.maxValues.total_points;
-      this.actual = this.playerWeek.total_points;
     },
     getTrainingData() {
       this.trainingData = this.csvData.map(data => {
@@ -109,10 +118,10 @@ export default {
     },
     trainBrain() {
       const config = {
-        errorThresh: 0.001,
+        errorThresh: 0.0007,
         learningRate: 0.4,
         log: log => {
-          console.log(log.error);
+          console.log(log);
         }
       };
       this.getMaxValues();
@@ -129,7 +138,7 @@ export default {
           dynamicTyping: true,
           skipEmptyLines: true,
           complete: function(res) {
-            self.csvData = [].concat(...self.csvData, res.data);
+            self.csvData.push(...res.data);
           }
         });
       });
@@ -149,12 +158,9 @@ export default {
   },
   computed: {
     errorRate() {
-      if (this.output && this.actual) {
-        var pct = (Math.abs(this.output - this.actual) / this.actual) * 100;
-        return pct;
-      } else {
-        return 0;
-      }
+      return this.output && this.actualPoints
+        ? (Math.abs(this.output - this.actualPoints) / this.actualPoints) * 100
+        : 0;
     },
     players() {
       return this.csvData.reduce((obj, data) => {
@@ -168,11 +174,12 @@ export default {
       }, {});
     },
     playerWeek() {
-      if (this.player != null && this.week != null) {
-        return this.players[this.player][this.week];
-      } else {
-        return null;
-      }
+      return this.player != null && this.week != null
+        ? this.players[this.player][this.week]
+        : null;
+    },
+    actualPoints() {
+      return this.playerWeek ? this.playerWeek.total_points : null;
     }
   },
   filters: {
