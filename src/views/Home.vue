@@ -40,7 +40,7 @@ import * as Papa from "papaparse";
 
 const config = {
   binaryThresh: 0.5,
-  hiddenLayers: [3],
+  hiddenLayers: [8, 8],
   activation: "sigmoid"
 };
 
@@ -50,6 +50,8 @@ export default {
   name: "Home",
   data() {
     return {
+      weeksOfData: 10,
+      dataRange: 5,
       urls: [
         "https://raw.githubusercontent.com/IHIutch/Fantasy-Premier-League/master/data/2019-20/gws/gw1.csv",
         "https://raw.githubusercontent.com/IHIutch/Fantasy-Premier-League/master/data/2019-20/gws/gw2.csv",
@@ -81,12 +83,12 @@ export default {
         "team_a_score",
         "team_h_score",
         "transfers_in",
-        "transfers_out",
-        "total_points"
+        "transfers_out"
       ],
       maxValues: {},
       trainingData: [],
-      didTrain: false
+      didTrain: false,
+      normalizedData: []
     };
   },
   methods: {
@@ -99,62 +101,95 @@ export default {
       let output = net.run(value);
       this.output = output * this.maxValues.total_points;
     },
-    getTrainingData() {
-      this.trainingData = this.csvData.map(data => {
-        let inputs = [];
-        let outputs = [];
-        this.columns.forEach(idx => {
-          if (idx == "total_points") {
-            outputs.push(data[idx] / this.maxValues[idx]);
-          } else {
-            inputs.push(data[idx] / this.maxValues[idx]);
-          }
+    setTrainingData() {
+      let cols = [...this.columns, "total_points"];
+      let max = {};
+
+      this.csvData.forEach(data => {
+        cols.forEach(col => {
+          max[col] = !max[col] || max[col] < data[col] ? data[col] : max[col];
         });
-        return {
-          input: inputs,
-          output: outputs
-        };
       });
+
+      this.csvData.forEach(idx => {
+        let data = {};
+        cols.forEach(col => {
+          data[col] = idx[col] / max[col];
+        });
+        this.normalizedData.push({
+          name: idx.name,
+          data: data
+        });
+      });
+
+      let obj = {};
+      this.normalizedData.forEach(player => {
+        if (!obj[player.name]) obj[player.name] = [];
+        obj[player.name].push(player.data);
+      });
+
+      return obj;
+    },
+    formatData() {
+      let playersList = this.setTrainingData();
+      let formattedData = [];
+      Object.keys(playersList).forEach(player => {
+        if (playersList[player].length == this.weeksOfData) {
+          for (
+            var range = 0;
+            range < this.weeksOfData - this.dataRange;
+            range++
+          ) {
+            let tmpObj = { input: [], output: [] };
+            for (var week = range; week < range + this.dataRange; week++) {
+              var { total_points, ...input } = playersList[player][week];
+              tmpObj.input = [].concat(
+                ...tmpObj.input,
+                Object.keys(input).map(key => {
+                  return input[key];
+                })
+              );
+              tmpObj.output = [playersList[player][week + 1]["total_points"]];
+            }
+            formattedData.push(tmpObj);
+          }
+        }
+      });
+      console.log(formattedData);
+      return formattedData;
     },
     trainBrain() {
       const config = {
-        errorThresh: 0.0007,
+        errorThresh: 0.0005,
         learningRate: 0.4,
         log: log => {
           console.log(log);
         }
       };
-      this.getMaxValues();
-      this.getTrainingData();
-      net.train(this.trainingData, config);
-      this.didTrain = true;
+      const data = this.formatData();
+      net.train(data, config);
     },
     loadData() {
       var self = this;
-      this.urls.forEach(url => {
-        Papa.parse(url, {
-          download: true,
-          header: true,
-          dynamicTyping: true,
-          skipEmptyLines: true,
-          complete: function(res) {
-            self.csvData.push(...res.data);
+      let i;
+      for (i = 1; i <= this.weeksOfData; i++) {
+        Papa.parse(
+          `https://raw.githubusercontent.com/IHIutch/Fantasy-Premier-League/master/data/2019-20/gws/gw${i}.csv`,
+          {
+            download: true,
+            header: true,
+            dynamicTyping: true,
+            skipEmptyLines: true,
+            complete: function(res) {
+              self.csvData.push(...res.data);
+            }
           }
-        });
-      });
-    },
-    getMaxValues() {
-      this.csvData.forEach(data => {
-        this.columns.forEach(col => {
-          if (!this.maxValues[col]) this.maxValues[col] = 0;
-          if (this.maxValues[col] < data[col]) this.maxValues[col] = data[col];
-        });
-      });
+        );
+      }
     }
   },
   mounted() {
     this.loadData();
-    // this.trainBrain();
   },
   computed: {
     errorRate() {
