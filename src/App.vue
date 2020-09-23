@@ -4,29 +4,19 @@
       <div>
         <select v-model="player">
           <option :value="null">-- Choose a Player --</option>
-          <option
-            v-for="(player, idx, count) in players"
-            :value="idx"
-            :key="count"
-          >
-            {{ idx }}
-          </option>
-        </select>
-        <select v-model="week">
-          <option :value="null">-- Choose a GW --</option>
-          <option v-for="(num, idx) in urls.length" :value="idx" :key="idx">
-            {{ num }}
+          <option v-for="(player, idx) in players" :value="player" :key="idx">
+            {{ player }}
           </option>
         </select>
       </div>
       <div>
-        <span>Predicted Points: {{ output | roundToThousandths }}</span>
+        <span>Predicted Points: {{ output | round(3) }}</span>
       </div>
       <div>
         <span>Actual Points: {{ actualPoints }}</span>
       </div>
       <div>
-        <span>Error: {{ errorRate | roundToThousandths }}%</span>
+        <span>Error: {{ errorRate | round(3) }}%</span>
       </div>
     </div>
     <button @click="trainBrain()">Train</button>
@@ -50,20 +40,9 @@ export default {
   name: "App",
   data() {
     return {
+      didTrain: false,
       weeksOfData: 10,
       dataRange: 5,
-      urls: [
-        "https://raw.githubusercontent.com/IHIutch/Fantasy-Premier-League/master/data/2019-20/gws/gw1.csv",
-        "https://raw.githubusercontent.com/IHIutch/Fantasy-Premier-League/master/data/2019-20/gws/gw2.csv",
-        "https://raw.githubusercontent.com/IHIutch/Fantasy-Premier-League/master/data/2019-20/gws/gw3.csv",
-        "https://raw.githubusercontent.com/IHIutch/Fantasy-Premier-League/master/data/2019-20/gws/gw4.csv",
-        "https://raw.githubusercontent.com/IHIutch/Fantasy-Premier-League/master/data/2019-20/gws/gw5.csv"
-      ],
-      player: null,
-      week: null,
-      output: 0,
-      actual: null,
-      csvData: [],
       columns: [
         "assists",
         "bonus",
@@ -85,13 +64,24 @@ export default {
         "transfers_in",
         "transfers_out"
       ],
+      player: null,
+      output: 0,
+      csvData: [],
       maxValues: {},
       trainingData: [],
-      didTrain: false,
       normalizedData: []
     };
   },
   methods: {
+    getMaxValues() {
+      const cols = [...this.columns, "total_points"];
+
+      cols.forEach(col => {
+        this.maxValues[col] = this.csvData.reduce((acc, row) => {
+          return Math.max(acc, row[col]);
+        }, 0);
+      });
+    },
     runBrain() {
       let value = [];
       Object.keys(this.playerWeek).forEach(key => {
@@ -102,33 +92,10 @@ export default {
       this.output = output * this.maxValues.total_points;
     },
     setTrainingData() {
-      let cols = [...this.columns, "total_points"];
-      let max = {};
-
-      this.csvData.forEach(data => {
-        cols.forEach(col => {
-          max[col] = !max[col] || max[col] < data[col] ? data[col] : max[col];
-        });
-      });
-
-      this.csvData.forEach(idx => {
-        let data = {};
-        cols.forEach(col => {
-          data[col] = idx[col] / max[col];
-        });
-        this.normalizedData.push({
-          name: idx.name,
-          data: data
-        });
-      });
-
-      let obj = {};
-      this.normalizedData.forEach(player => {
-        if (!obj[player.name]) obj[player.name] = [];
-        obj[player.name].push(player.data);
-      });
-
-      return obj;
+      return this.csvData.reduce((acc, player) => {
+        acc[player.name] = [...(acc[player.name] || []), player];
+        return acc;
+      }, {});
     },
     formatData() {
       let playersList = this.setTrainingData();
@@ -198,15 +165,7 @@ export default {
         : 0;
     },
     players() {
-      return this.csvData.reduce((obj, data) => {
-        if (!obj[data.name]) {
-          obj[data.name] = [];
-          obj[data.name].push(data);
-        } else {
-          obj[data.name].push(data);
-        }
-        return obj;
-      }, {});
+      return [...new Set(this.csvData.map(row => row.name))].sort();
     },
     playerWeek() {
       return this.player != null && this.week != null
@@ -218,8 +177,8 @@ export default {
     }
   },
   filters: {
-    roundToThousandths(val) {
-      return val.toFixed(3);
+    round(val, dec) {
+      return val.toFixed(dec);
     }
   }
 };
