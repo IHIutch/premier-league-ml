@@ -1,26 +1,85 @@
 <template>
   <div id="app">
-    <div>
-      <div>
-        <select v-model="player">
-          <option :value="null">-- Choose a Player --</option>
-          <option v-for="(player, idx) in players" :value="player" :key="idx">
-            {{ player }}
-          </option>
-        </select>
-      </div>
-      <div>
-        <span>Predicted Points: {{ output | round(3) }}</span>
-      </div>
-      <div>
-        <span>Actual Points: {{ actualPoints }}</span>
-      </div>
-      <div>
-        <span>Error: {{ errorRate | round(3) }}%</span>
-      </div>
-    </div>
-    <button @click="trainBrain()">Train</button>
-    <button @click="runBrain()" :disabled="!didTrain">Run</button>
+    <b-container class="mt-5">
+      <b-row class="mb-4">
+        <b-col>
+          <div class="mb-4">
+            <b-form-select v-model="player" :options="players">
+              <template v-slot:first>
+                <b-form-select-option :value="null" disabled
+                  >-- Select a Player --</b-form-select-option
+                >
+              </template>
+            </b-form-select>
+          </div>
+          <div class="d-flex mb-4">
+            <div class="mr-4">
+              <span>Predicted Points: {{ output | round(3) }}</span>
+            </div>
+            <div class="mr-4">
+              <span>Actual Points: {{ actualPoints }}</span>
+            </div>
+            <div>
+              <span>Error: {{ errorRate | round(3) }}%</span>
+            </div>
+          </div>
+          <div>
+            <b-button class="mr-4" @click="trainBrain()">Train</b-button>
+            <b-button
+              variant="primary"
+              @click="runBrain()"
+              :disabled="!didTrain"
+              >Run</b-button
+            >
+          </div>
+        </b-col>
+      </b-row>
+      <b-row>
+        <b-col cols="6">
+          <b-form-group class="mb-0">
+            <b-input-group>
+              <b-form-input
+                v-model="table.filter"
+                type="search"
+                id="filterInput"
+                placeholder="Type to Search"
+              ></b-form-input>
+              <b-input-group-append>
+                <b-button :disabled="!table.filter" @click="table.filter = ''"
+                  >Clear</b-button
+                >
+              </b-input-group-append>
+            </b-input-group>
+          </b-form-group>
+        </b-col>
+        <b-col cols="6">
+          <b-pagination
+            v-model="table.currentPage"
+            :total-rows="players.length"
+            :per-page="table.perPage"
+            align="fill"
+            class="my-0"
+          ></b-pagination>
+        </b-col>
+        <b-col>
+          <b-table
+            class="mt-4"
+            striped
+            hover
+            small
+            :items="players"
+            :fields="['name']"
+            :current-page="table.currentPage"
+            :per-page="table.perPage"
+            :filter="table.filter"
+          >
+            <template v-slot:cell(name)="data">
+              {{ data.value }}
+            </template>
+          </b-table>
+        </b-col>
+      </b-row>
+    </b-container>
   </div>
 </template>
 
@@ -40,6 +99,11 @@ export default {
   name: "App",
   data() {
     return {
+      table: {
+        perPage: 25,
+        currentPage: 1,
+        filter: ""
+      },
       didTrain: false,
       weeksOfData: 10,
       dataRange: 5,
@@ -165,7 +229,12 @@ export default {
         : 0;
     },
     players() {
-      return [...new Set(this.csvData.map(row => row.name))].sort();
+      let uniquePlayers = [
+        ...new Set(this.csvData.map(row => row.name))
+      ].sort();
+      return uniquePlayers.map(p => {
+        return { name: p };
+      });
     },
     playerWeek() {
       return this.player != null && this.week != null
