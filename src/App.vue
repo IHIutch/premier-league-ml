@@ -68,10 +68,16 @@
             hover
             small
             :items="players"
-            :fields="['name']"
+            :fields="[
+              { key: 'name', sortable: true },
+              { key: 'predicted_points', sortable: true },
+              { key: 'error_rate', sortable: true },
+              { key: 'price', sortable: true }
+            ]"
             :current-page="table.currentPage"
             :per-page="table.perPage"
             :filter="table.filter"
+            sort-by="name"
           >
             <template v-slot:cell(name)="data">
               {{ data.value }}
