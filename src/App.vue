@@ -4,7 +4,7 @@
       <b-row class="mb-4">
         <b-col>
           <div class="mb-4">
-            <b-form-select v-model="player" :options="players">
+            <b-form-select v-model="player" :options="Object.keys(playerData)">
               <template v-slot:first>
                 <b-form-select-option :value="null" disabled
                   >-- Select a Player --</b-form-select-option
@@ -55,7 +55,7 @@
         <b-col cols="6">
           <b-pagination
             v-model="table.currentPage"
-            :total-rows="players.length"
+            :total-rows="Object.keys(playerData).length"
             :per-page="table.perPage"
             align="fill"
             class="my-0"
@@ -67,7 +67,7 @@
             striped
             hover
             small
-            :items="players"
+            :items="Object.entries(playerData)"
             :fields="[
               { key: 'name', sortable: true },
               { key: 'predicted_points', sortable: true },
@@ -80,7 +80,7 @@
             sort-by="name"
           >
             <template v-slot:cell(name)="data">
-              {{ data.value }}
+              {{ data.item[0] }}
             </template>
           </b-table>
         </b-col>
@@ -137,7 +137,6 @@ export default {
       player: null,
       output: 0,
       csvData: [],
-      maxValues: {},
       trainingData: [],
       normalizedData: []
     };
@@ -145,17 +144,17 @@ export default {
   methods: {
     getMaxValues() {
       const cols = [...this.columns, "total_points"];
-
       cols.forEach(col => {
         this.maxValues[col] = this.csvData.reduce((acc, row) => {
           return Math.max(acc, row[col]);
         }, 0);
       });
     },
+
     runBrain() {
       let value = [];
       Object.keys(this.playerWeek).forEach(key => {
-        if (this.columns.indexOf(key) != -1 && key != "total_points")
+        if (this.columns.contains(key) && key != "total_points")
           value.push(this.playerWeek[key] / this.maxValues[key]);
       });
       let output = net.run(value);
@@ -168,31 +167,30 @@ export default {
       }, {});
     },
     formatData() {
-      let playersList = this.setTrainingData();
       let formattedData = [];
-      Object.keys(playersList).forEach(player => {
-        if (playersList[player].length == this.weeksOfData) {
-          for (
-            var range = 0;
-            range < this.weeksOfData - this.dataRange;
-            range++
-          ) {
-            let tmpObj = { input: [], output: [] };
-            for (var week = range; week < range + this.dataRange; week++) {
-              var { total_points, ...input } = playersList[player][week];
-              tmpObj.input = [].concat(
-                ...tmpObj.input,
-                Object.keys(input).map(key => {
-                  return input[key];
-                })
-              );
-              tmpObj.output = [playersList[player][week + 1]["total_points"]];
-            }
-            formattedData.push(tmpObj);
+      Object.keys(this.playerData).forEach(name => {
+        const data = this.playerData[name].sort((a, b) => {
+          return a.round - b.round;
+        });
+        if (data.length >= this.dataRange + 1) {
+          for (var range = 0; range < data.length - this.dataRange; range++) {
+            const input = [...data].splice(range, this.dataRange).map(row => {
+              return this.columns.map(col => {
+                return row[col] / this.maxValues[col];
+              });
+            });
+            const output = [
+              [data[range + this.dataRange]][0]["total_points"] /
+                this.maxValues["total_points"]
+            ];
+            formattedData.push({
+              input,
+              output
+            });
           }
         }
       });
-      console.log(formattedData);
+      // console.log(formattedData);
       return formattedData;
     },
     trainBrain() {
@@ -204,7 +202,8 @@ export default {
         }
       };
       const data = this.formatData();
-      net.train(data, config);
+      console.log(data);
+      // net.train(data, config);
     },
     loadData() {
       var self = this;
@@ -217,7 +216,7 @@ export default {
             header: true,
             dynamicTyping: true,
             skipEmptyLines: true,
-            complete: function(res) {
+            complete: res => {
               self.csvData.push(...res.data);
             }
           }
@@ -229,22 +228,29 @@ export default {
     this.loadData();
   },
   computed: {
+    maxValues() {
+      let obj = {};
+      const cols = [...this.columns, "total_points"];
+      cols.forEach(col => {
+        obj[col] = Math.max(...this.csvData.map(row => row[col]));
+      });
+      return obj;
+    },
     errorRate() {
       return this.output && this.actualPoints
         ? (Math.abs(this.output - this.actualPoints) / this.actualPoints) * 100
         : 0;
     },
-    players() {
-      let uniquePlayers = [
-        ...new Set(this.csvData.map(row => row.name))
-      ].sort();
-      return uniquePlayers.map(p => {
-        return { name: p };
-      });
+    playerData() {
+      let data = this.csvData.reduce((acc, row) => {
+        acc[row.name] = [...(acc[row.name] || []), row];
+        return acc;
+      }, {});
+      return data;
     },
     playerWeek() {
       return this.player != null && this.week != null
-        ? this.players[this.player][this.week]
+        ? this.playerData[this.player][this.week]
         : null;
     },
     actualPoints() {
