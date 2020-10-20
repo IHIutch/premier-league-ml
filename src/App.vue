@@ -3,26 +3,6 @@
     <b-container class="mt-5">
       <b-row class="mb-4">
         <b-col>
-          <div class="mb-4">
-            <b-form-select v-model="player" :options="Object.keys(playerData)">
-              <template v-slot:first>
-                <b-form-select-option :value="null" disabled
-                  >-- Select a Player --</b-form-select-option
-                >
-              </template>
-            </b-form-select>
-          </div>
-          <div class="d-flex mb-4">
-            <div class="mr-4">
-              <span>Predicted Points: {{ output | round(3) }}</span>
-            </div>
-            <div class="mr-4">
-              <span>Actual Points: {{ actualPoints }}</span>
-            </div>
-            <div>
-              <span>Error: {{ errorRate | round(3) }}%</span>
-            </div>
-          </div>
           <div>
             <b-button class="mr-4" @click="trainBrain()">Train</b-button>
             <b-button
@@ -55,7 +35,7 @@
         <b-col cols="6">
           <b-pagination
             v-model="table.currentPage"
-            :total-rows="Object.keys(playerData).length"
+            :total-rows="Object.keys(players).length"
             :per-page="table.perPage"
             align="fill"
             class="my-0"
@@ -67,21 +47,21 @@
             striped
             hover
             small
-            :items="Object.entries(playerData)"
+            :items="players"
             :fields="[
-              { key: 'name', sortable: true },
-              { key: 'predicted_points', sortable: true },
-              { key: 'error_rate', sortable: true },
-              { key: 'price', sortable: true }
+              { key: 'first_name', sortable: true },
+              { key: 'second_name', sortable: true, label: 'Last Name' },
+              { key: 'now_cost', sortable: true },
+              { key: 'total_points', sortable: true, label: 'Points' },
+              { key: 'predicted_points', sortable: true }
             ]"
             :current-page="table.currentPage"
             :per-page="table.perPage"
             :filter="table.filter"
-            sort-by="name"
+            sort-by="now_cost"
+            :sort-desc="true"
           >
-            <template v-slot:cell(name)="data">
-              {{ data.item[0] }}
-            </template>
+            <template #cell(now_cost)="data"> ${{ data.value }} </template>
           </b-table>
         </b-col>
       </b-row>
@@ -92,6 +72,10 @@
 <script>
 import * as brain from "brain.js";
 import * as Papa from "papaparse";
+import * as fs from "fs";
+import dayjs from "dayjs";
+import trainings from "@/trainings";
+import axios from "axios";
 
 const config = {
   binaryThresh: 0.5,
@@ -134,14 +118,28 @@ export default {
         "transfers_in",
         "transfers_out"
       ],
-      player: null,
-      output: 0,
       csvData: [],
-      trainingData: [],
-      normalizedData: []
+      calculatedData: [],
+      players: [],
+      apiUrl: "https://fantasy.premierleague.com/api/bootstrap-static/"
     };
   },
   methods: {
+    fetchPlayers() {
+      axios
+        .get("/api")
+        .then(res => {
+          this.players = res.data.elements.map(player => {
+            return {
+              ...player,
+              key: `${player.first_name}_${player.second_name}_${player.id}`
+            };
+          });
+        })
+        .catch(err => {
+          console.log(err);
+        });
+    },
     getMaxValues() {
       const cols = [...this.columns, "total_points"];
       cols.forEach(col => {
@@ -150,21 +148,28 @@ export default {
         }, 0);
       });
     },
-
     runBrain() {
-      let value = [];
-      Object.keys(this.playerWeek).forEach(key => {
-        if (this.columns.contains(key) && key != "total_points")
-          value.push(this.playerWeek[key] / this.maxValues[key]);
+      Object.keys(this.playerData).forEach(name => {
+        const data = this.playerData[name].sort((a, b) => {
+          return a.round - b.round;
+        });
+        console.log(data[data.length - 1].round);
+        if (data[data.length - 1].round === 10) {
+          const input = [...data]
+            .splice(-1, this.dataRange)
+            .map(row => {
+              return this.columns.map(col => {
+                return row[col] / this.maxValues[col];
+              });
+            })
+            .flat();
+          // const prediction = net.run({ input });
+          this.calculatedData.push({
+            name,
+            input
+          });
+        }
       });
-      let output = net.run(value);
-      this.output = output * this.maxValues.total_points;
-    },
-    setTrainingData() {
-      return this.csvData.reduce((acc, player) => {
-        acc[player.name] = [...(acc[player.name] || []), player];
-        return acc;
-      }, {});
     },
     formatData() {
       let formattedData = [];
@@ -174,11 +179,14 @@ export default {
         });
         if (data.length >= this.dataRange + 1) {
           for (var range = 0; range < data.length - this.dataRange; range++) {
-            const input = [...data].splice(range, this.dataRange).map(row => {
-              return this.columns.map(col => {
-                return row[col] / this.maxValues[col];
-              });
-            });
+            const input = [...data]
+              .splice(range, this.dataRange)
+              .map(row => {
+                return this.columns.map(col => {
+                  return row[col] / this.maxValues[col];
+                });
+              })
+              .flat();
             const output = [
               [data[range + this.dataRange]][0]["total_points"] /
                 this.maxValues["total_points"]
@@ -193,17 +201,29 @@ export default {
       // console.log(formattedData);
       return formattedData;
     },
+    saveBrain() {
+      const date = dayjs().format("YYYY-MM-DD");
+      const json = net.toJSON();
+      const a = document.createElement("a");
+      const file = new Blob([JSON.stringify(json)], { type: "text/plain" });
+      a.href = URL.createObjectURL(file);
+      a.download = `trained-${date}.json`;
+      a.click();
+    },
     trainBrain() {
+      let self = this;
       const config = {
-        errorThresh: 0.0005,
-        learningRate: 0.4,
-        log: log => {
-          console.log(log);
+        errorThresh: 0.003,
+        learningRate: 0.3,
+        log: info => {
+          console.log(info);
+          // console.log(`Progress: ${((0.003 / info.error) * 100).toFixed(2)}%`);
         }
       };
       const data = this.formatData();
-      console.log(data);
-      // net.train(data, config);
+      net.train(data, config);
+      this.saveBrain();
+      this.didTrain = true;
     },
     loadData() {
       var self = this;
@@ -222,10 +242,18 @@ export default {
           }
         );
       }
+    },
+    importTraining() {
+      const weeks = Object.keys(trainings);
+      const latest = trainings[weeks[weeks.length - 1]];
+      net.fromJSON(latest);
+      this.didTrain = true;
     }
   },
   mounted() {
-    this.loadData();
+    this.importTraining();
+    // this.loadData();
+    this.fetchPlayers();
   },
   computed: {
     maxValues() {
@@ -235,11 +263,6 @@ export default {
         obj[col] = Math.max(...this.csvData.map(row => row[col]));
       });
       return obj;
-    },
-    errorRate() {
-      return this.output && this.actualPoints
-        ? (Math.abs(this.output - this.actualPoints) / this.actualPoints) * 100
-        : 0;
     },
     playerData() {
       let data = this.csvData.reduce((acc, row) => {
