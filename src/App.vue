@@ -131,7 +131,11 @@ export default {
         .then(res => {
           this.players = res.data.elements.map(player => {
             return {
-              ...player,
+              first_name: player.first_name,
+              second_name: player.second_name,
+              now_cost: player.now_cost,
+              total_points: player.total_points,
+              id: player.id,
               key: `${player.first_name}_${player.second_name}_${player.id}`
             };
           });
