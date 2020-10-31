@@ -51,7 +51,9 @@
             :fields="[
               { key: 'first_name', sortable: true },
               { key: 'second_name', sortable: true, label: 'Last Name' },
+              { key: 'position', sortable: true },
               { key: 'now_cost', sortable: true },
+              { key: 'chance_of_playing_this_round', sortable: true },
               { key: 'total_points', sortable: true, label: 'Points' },
               { key: 'predicted_points', sortable: true }
             ]"
@@ -60,6 +62,7 @@
             :filter="table.filter"
             sort-by="now_cost"
             :sort-desc="true"
+            ref="table"
           >
             <template #cell(now_cost)="data"> ${{ data.value }} </template>
           </b-table>
@@ -95,9 +98,10 @@ export default {
         filter: ""
       },
       didTrain: false,
-      weeksOfData: 10,
+      weeksOfData: 6,
       dataRange: 5,
       columns: [
+        // "xP",
         "assists",
         "bonus",
         "bps",
@@ -109,14 +113,24 @@ export default {
         "goals_scored",
         "ict_index",
         "influence",
-        "selected",
-        "threat",
-        "value",
         "minutes",
+        "opponent_team",
+        "own_goals",
+        "penalties_missed",
+        "penalties_saved",
+        "red_cards",
+        "round",
+        "saves",
+        "selected",
         "team_a_score",
         "team_h_score",
+        "threat",
+        "transfers_balance",
         "transfers_in",
-        "transfers_out"
+        "transfers_out",
+        "value",
+        "was_home",
+        "yellow_cards"
       ],
       csvData: [],
       calculatedData: [],
@@ -136,6 +150,7 @@ export default {
               now_cost: player.now_cost,
               total_points: player.total_points,
               id: player.id,
+              chance_of_playing_this_round: player.chance_of_playing_this_round,
               key: `${player.first_name}_${player.second_name}_${player.id}`
             };
           });
@@ -144,9 +159,12 @@ export default {
           console.log(err);
         });
     },
-    getMaxValues() {
+    getMinMaxValues() {
       const cols = [...this.columns, "total_points"];
       cols.forEach(col => {
+        this.minValues[col] = this.csvData.reduce((acc, row) => {
+          return Math.min(acc, row[col]);
+        }, 0);
         this.maxValues[col] = this.csvData.reduce((acc, row) => {
           return Math.max(acc, row[col]);
         }, 0);
@@ -157,23 +175,37 @@ export default {
         const data = this.playerData[name].sort((a, b) => {
           return a.round - b.round;
         });
-        console.log(data[data.length - 1].round);
-        if (data[data.length - 1].round === 10) {
+        if (data.length === this.weeksOfData) {
           const input = [...data]
-            .splice(-1, this.dataRange)
+            .splice(this.dataRange * -1, this.dataRange)
             .map(row => {
               return this.columns.map(col => {
-                return row[col] / this.maxValues[col];
+                return this.normalize(
+                  row[col],
+                  this.minMaxValues.min[col],
+                  this.minMaxValues.max[col]
+                );
               });
             })
             .flat();
-          // const prediction = net.run({ input });
-          this.calculatedData.push({
-            name,
-            input
+          let prediction = net.run(input);
+          prediction = Array.from(prediction).pop();
+
+          let currentPlayer = this.players.find(player => {
+            return `${player.first_name} ${player.second_name}` == name;
           });
+
+          if (currentPlayer) {
+            currentPlayer["position"] = this.playerData[name][0].position;
+            currentPlayer["predicted_points"] = this.denormalize(
+              prediction,
+              this.minMaxValues.min["total_points"],
+              this.minMaxValues.max["total_points"]
+            ).toFixed(3);
+          }
         }
       });
+      this.$refs.table.refresh();
     },
     formatData() {
       let formattedData = [];
@@ -187,13 +219,20 @@ export default {
               .splice(range, this.dataRange)
               .map(row => {
                 return this.columns.map(col => {
-                  return row[col] / this.maxValues[col];
+                  return this.normalize(
+                    row[col],
+                    this.minMaxValues.min[col],
+                    this.minMaxValues.max[col]
+                  );
                 });
               })
               .flat();
             const output = [
-              [data[range + this.dataRange]][0]["total_points"] /
-                this.maxValues["total_points"]
+              this.normalize(
+                [data[range + this.dataRange]][0]["total_points"],
+                this.minMaxValues.min["total_points"],
+                this.minMaxValues.max["total_points"]
+              )
             ];
             formattedData.push({
               input,
@@ -218,7 +257,7 @@ export default {
       let self = this;
       const config = {
         errorThresh: 0.003,
-        learningRate: 0.3,
+        learningRate: 0.1,
         log: info => {
           console.log(info);
           // console.log(`Progress: ${((0.003 / info.error) * 100).toFixed(2)}%`);
@@ -231,17 +270,24 @@ export default {
     },
     loadData() {
       var self = this;
-      let i;
-      for (i = 1; i <= this.weeksOfData; i++) {
+      for (let i = 1; i <= this.weeksOfData; i++) {
         Papa.parse(
-          `https://raw.githubusercontent.com/IHIutch/Fantasy-Premier-League/master/data/2019-20/gws/gw${i}.csv`,
+          // `https://raw.githubusercontent.com/IHIutch/Fantasy-Premier-League/master/data/2020-21/gws/gw${i}.csv`,
+          `https://raw.githubusercontent.com/vaastav/Fantasy-Premier-League/master/data/2020-21/gws/gw${i}.csv`,
           {
             download: true,
             header: true,
             dynamicTyping: true,
             skipEmptyLines: true,
             complete: res => {
-              self.csvData.push(...res.data);
+              self.csvData.push(
+                ...res.data.map(d => {
+                  return {
+                    ...d,
+                    was_home: d.was_home === "True" ? 1 : 0
+                  };
+                })
+              );
             }
           }
         );
@@ -252,21 +298,29 @@ export default {
       const latest = trainings[weeks[weeks.length - 1]];
       net.fromJSON(latest);
       this.didTrain = true;
+    },
+    normalize(val, min, max) {
+      return (val - min) / (max - min);
+    },
+    denormalize(val, min, max) {
+      return max * val - val * min + min;
     }
   },
   mounted() {
     this.importTraining();
-    // this.loadData();
+    this.loadData();
     this.fetchPlayers();
   },
   computed: {
-    maxValues() {
-      let obj = {};
+    minMaxValues() {
+      let min = {};
+      let max = {};
       const cols = [...this.columns, "total_points"];
       cols.forEach(col => {
-        obj[col] = Math.max(...this.csvData.map(row => row[col]));
+        min[col] = Math.min(...this.csvData.map(row => row[col]));
+        max[col] = Math.max(...this.csvData.map(row => row[col]));
       });
-      return obj;
+      return { min, max };
     },
     playerData() {
       let data = this.csvData.reduce((acc, row) => {
