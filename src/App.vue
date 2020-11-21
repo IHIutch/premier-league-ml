@@ -180,7 +180,7 @@ export default {
         const data = this.playerData[name].sort((a, b) => {
           return a.round - b.round;
         });
-        if (data.length === this.weeksOfData) {
+        if (data.length > this.dataRange) {
           const input = [...data]
             .splice(this.dataRange * -1, this.dataRange)
             .map(row => {
