@@ -52,8 +52,13 @@
               { key: 'first_name', sortable: true },
               { key: 'second_name', sortable: true, label: 'Last Name' },
               { key: 'position', sortable: true },
+              { key: 'team', sortable: true },
               { key: 'now_cost', sortable: true },
-              { key: 'chance_of_playing_this_round', sortable: true },
+              {
+                key: 'chance_of_playing_this_round',
+                label: 'Chance of Playing',
+                sortable: true
+              },
               { key: 'total_points', sortable: true, label: 'Points' },
               { key: 'predicted_points', sortable: true }
             ]"
@@ -98,7 +103,7 @@ export default {
         filter: ""
       },
       didTrain: false,
-      weeksOfData: 6,
+      weeksOfData: 8,
       dataRange: 5,
       columns: [
         // "xP",
@@ -196,6 +201,7 @@ export default {
           });
 
           if (currentPlayer) {
+            currentPlayer["team"] = this.playerData[name][0].team;
             currentPlayer["position"] = this.playerData[name][0].position;
             currentPlayer["predicted_points"] = this.denormalize(
               prediction,
@@ -257,7 +263,7 @@ export default {
       let self = this;
       const config = {
         errorThresh: 0.003,
-        learningRate: 0.1,
+        learningRate: 0.05,
         log: info => {
           console.log(info);
           // console.log(`Progress: ${((0.003 / info.error) * 100).toFixed(2)}%`);
