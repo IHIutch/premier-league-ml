@@ -103,7 +103,7 @@ export default {
         filter: ""
       },
       didTrain: false,
-      weeksOfData: 10,
+      weeksOfData: 12,
       dataRange: 5,
       columns: [
         // "xP",
@@ -313,7 +313,8 @@ export default {
     }
   },
   mounted() {
-    this.importTraining();
+    // Dont import training before running the new training
+    // this.importTraining();
     this.loadData();
     this.fetchPlayers();
   },
