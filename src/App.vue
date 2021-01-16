@@ -103,7 +103,7 @@ export default {
         filter: ""
       },
       didTrain: false,
-      weeksOfData: 17,
+      weeksOfData: 18,
       dataRange: 5,
       columns: [
         // "xP",
