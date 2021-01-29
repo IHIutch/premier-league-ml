@@ -3,14 +3,22 @@
     <b-container class="mt-5">
       <b-row class="mb-4">
         <b-col>
-          <div>
+          <div class="d-flex align-items-center">
             <b-button class="mr-4" @click="trainBrain()">Train</b-button>
             <b-button
               variant="primary"
               @click="runBrain()"
-              :disabled="!didTrain"
+              :disabled="!didTrain || !doubleCheck"
               >Run</b-button
             >
+            <b-form-checkbox
+              id="doubleCheck"
+              v-model="doubleCheck"
+              name="doubleCheck"
+              class="ml-4"
+            >
+              I ran the Trainer before importing new data
+            </b-form-checkbox>
           </div>
         </b-col>
       </b-row>
@@ -103,8 +111,9 @@ export default {
         filter: ""
       },
       didTrain: false,
-      weeksOfData: 18,
+      weeksOfData: 20,
       dataRange: 5,
+      doubleCheck: false,
       columns: [
         // "xP",
         "assists",
