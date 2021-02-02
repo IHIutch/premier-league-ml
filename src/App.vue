@@ -83,7 +83,6 @@
 <script>
 import * as brain from "brain.js";
 import * as Papa from "papaparse";
-import * as fs from "fs";
 import dayjs from "dayjs";
 import trainings from "@/trainings";
 import axios from "axios";
@@ -106,7 +105,7 @@ export default {
         filter: ""
       },
       didTrain: false,
-      weeksOfData: 20,
+      weeksOfData: 21,
       dataRange: 5,
       columns: [
         // "xP",
