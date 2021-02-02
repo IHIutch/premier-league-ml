@@ -4,21 +4,16 @@
       <b-row class="mb-4">
         <b-col>
           <div class="d-flex align-items-center">
-            <b-button class="mr-4" @click="trainBrain()">Train</b-button>
+            <b-button class="mr-2" variant="primary" @click="trainBrain()"
+              >Train</b-button
+            >
+            <b-button class="mr-5" @click="importTraining()">Import</b-button>
             <b-button
               variant="primary"
               @click="runBrain()"
-              :disabled="!didTrain || !doubleCheck"
+              :disabled="!didTrain"
               >Run</b-button
             >
-            <b-form-checkbox
-              id="doubleCheck"
-              v-model="doubleCheck"
-              name="doubleCheck"
-              class="ml-4"
-            >
-              I ran the Trainer before importing new data
-            </b-form-checkbox>
           </div>
         </b-col>
       </b-row>
@@ -113,7 +108,6 @@ export default {
       didTrain: false,
       weeksOfData: 20,
       dataRange: 5,
-      doubleCheck: false,
       columns: [
         // "xP",
         "assists",
@@ -322,8 +316,6 @@ export default {
     }
   },
   mounted() {
-    // Dont import training before running the new training
-    this.importTraining();
     this.loadData();
     this.fetchPlayers();
   },
