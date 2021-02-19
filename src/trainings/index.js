@@ -14,6 +14,7 @@ import week13 from "./trained-2021-01-29.json";
 import week14 from "./trained-2021-02-01.json";
 import week15 from "./trained-2021-02-05.json";
 import week16 from "./trained-2021-02-12.json";
+import week17 from "./trained-2021-02-18.json";
 
 export default {
   week1,
@@ -31,5 +32,6 @@ export default {
   week13,
   week14,
   week15,
-  week16
+  week16,
+  week17
 };
